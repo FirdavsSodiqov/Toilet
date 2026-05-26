@@ -116,8 +116,41 @@ async function getMe(req, res, next) {
   }
 }
 
+async function updateProfile(req, res, next) {
+  try {
+    const userId = req.user.id;
+    const { name, phone, bio, avatar } = req.body;
+
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (phone !== undefined) {
+      const existing = await prisma.user.findUnique({ where: { phone } });
+      if (existing && existing.id !== userId) {
+        return res.status(409).json({ success: false, message: 'Phone already in use' });
+      }
+      updateData.phone = phone;
+    }
+    if (bio !== undefined) updateData.bio = bio;
+    if (avatar !== undefined) updateData.avatar = avatar;
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: updateData
+    });
+
+    return res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      data: sanitizeUser(user)
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   register,
   login,
-  getMe
+  getMe,
+  updateProfile
 };

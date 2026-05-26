@@ -25,13 +25,15 @@ enum ToiletType {
 }
 
 model User {
-  id      Int       @id @default(autoincrement())
-  name    String
-  phone   String    @unique
+  id       Int      @id @default(autoincrement())
+  name     String
+  phone    String   @unique
   password String
-  role    String    @default("USER")
-  toilets Toilet[]
-  reviews Review[]
+  role     String   @default("USER")
+  bio      String?
+  avatar   String?
+  toilets  Toilet[]
+  reviews  Review[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

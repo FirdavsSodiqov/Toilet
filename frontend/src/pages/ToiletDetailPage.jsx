@@ -1,52 +1,64 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { request } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 
-const quickFeedbackOptions = ['Toza', 'Arzon', 'Qulay', 'Navbat bor', 'Sovun bor'];
+const QUICK_OPTS = ['Toza', 'Arzon', 'Qulay', 'Navbat bor', 'Sovun bor'];
+const STATUS_CFG = {
+  OPEN:    { label: 'Ochiq',      color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
+  CLOSED:  { label: 'Yopilgan',   color: '#ef4444', bg: 'rgba(239,68,68,0.12)' },
+  LIMITED: { label: 'Cheklangan', color: '#eab308', bg: 'rgba(234,179,8,0.12)' },
+};
+const TYPE_LABELS = { PUBLIC: '🚻 Ommaviy', PREMIUM: '⭐ Premium', PAID: "💳 To'lovli", PRIVATE: '🔒 Xususiy' };
 
 export default function ToiletDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { chatMessages, sendMessage } = useSocket();
-  
-  const [toilet, setToilet] = useState(null);
-  const [reviews, setReviews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
 
-  const [reviewForm, setReviewForm] = useState({
-    rating: '5',
-    comment: '',
-    quick_feedback: []
-  });
-
+  const [toilet, setToilet]     = useState(null);
+  const [reviews, setReviews]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [pageError, setPageError] = useState('');
+  const [activeImg, setActiveImg] = useState(0);
+  const [reviewForm, setReviewForm] = useState({ rating: '5', comment: '', quick_feedback: [] });
+  const [reviewLoading, setReviewLoading] = useState(false);
   const [chatText, setChatText] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, [id]);
+  useEffect(() => { loadData(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadData() {
     try {
       setLoading(true);
+      setPageError('');
       const [toiletRes, reviewsRes] = await Promise.all([
         request(`/toilets/${id}`),
         request(`/reviews/toilet/${id}`)
       ]);
       setToilet(toiletRes.data);
       setReviews(reviewsRes.data || []);
-    } catch (error) {
-      setMessage(error.message);
+      setActiveImg(0);
+    } catch (err) {
+      setPageError(err.message || 'Yuklanishda xatolik');
     } finally {
       setLoading(false);
     }
   }
 
+  const images = useMemo(() => {
+    if (!toilet) return [];
+    if (Array.isArray(toilet.images)) return toilet.images.filter(Boolean);
+    try { return JSON.parse(toilet.images) || []; } catch { return []; }
+  }, [toilet]);
+
+  const statusCfg = STATUS_CFG[toilet?.status] || STATUS_CFG.OPEN;
+
   async function handleReviewSubmit(e) {
     e.preventDefault();
+    setReviewLoading(true);
     try {
       await request('/reviews', {
         method: 'POST',
@@ -57,24 +69,22 @@ export default function ToiletDetailPage() {
           quick_feedback: reviewForm.quick_feedback
         })
       });
-      setMessage('Sharh saqlandi');
       setReviewForm({ rating: '5', comment: '', quick_feedback: [] });
       loadData();
-    } catch (error) {
-      setMessage(error.message);
+    } catch (err) {
+      setPageError(err.message);
+    } finally {
+      setReviewLoading(false);
     }
   }
 
   function toggleQuickFeedback(val) {
-    setReviewForm(prev => {
-      const exists = prev.quick_feedback.includes(val);
-      return {
-        ...prev,
-        quick_feedback: exists 
-          ? prev.quick_feedback.filter(i => i !== val)
-          : [...prev.quick_feedback, val]
-      };
-    });
+    setReviewForm(prev => ({
+      ...prev,
+      quick_feedback: prev.quick_feedback.includes(val)
+        ? prev.quick_feedback.filter(i => i !== val)
+        : [...prev.quick_feedback, val]
+    }));
   }
 
   function handleSendChat(e) {
@@ -85,225 +95,302 @@ export default function ToiletDetailPage() {
   }
 
   async function handleDelete() {
-    if (!window.confirm("O'chirmoqchimisiz?")) return;
     try {
       await request(`/toilets/${id}`, { method: 'DELETE' });
       navigate('/');
-    } catch (error) {
-      setMessage(error.message);
+    } catch (err) {
+      setPageError(err.message);
+      setDeleteConfirm(false);
     }
   }
 
+  const googleNav = toilet ? `https://www.google.com/maps/dir/?api=1&destination=${toilet.lat},${toilet.lng}` : '#';
+  const yandexNav = toilet ? `https://yandex.com/maps/?rtext=~${toilet.lat},${toilet.lng}&rtt=auto` : '#';
+
+  /* ── Loading ── */
   if (loading) return (
-    <div className="flex flex-col items-center justify-center py-20 gap-4">
-      <span className="loading loading-spinner loading-lg text-primary"></span>
-      <p className="font-bold opacity-50 uppercase tracking-widest text-xs">Yuklanmoqda...</p>
+    <div className="dp-loading">
+      <div className="dp-spinner" />
+      <p>Yuklanmoqda...</p>
     </div>
   );
-  
+
+  /* ── Not found ── */
   if (!toilet) return (
-    <div className="flex flex-col items-center justify-center py-20 gap-4">
-      <div className="alert alert-error max-w-md">
-        <span>Xatolik: Toilet topilmadi</span>
-      </div>
-      <button className="btn btn-ghost" onClick={() => navigate('/')}>Orqaga qaytish</button>
+    <div className="dp-loading">
+      <div style={{fontSize:'48px'}}>🚽</div>
+      <p style={{color:'var(--text-secondary)',marginTop:'12px'}}>Joy topilmadi</p>
+      <button className="dp-back-btn" onClick={() => navigate('/')}>← Orqaga</button>
     </div>
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Left Column: Details and Reviews */}
-      <div className="lg:col-span-2 space-y-8">
-        {/* Main Details Panel */}
-        <div className="card bg-base-100 shadow-xl border border-base-content/5">
-          <div className="card-body p-0">
-            {/* Hero Image / Gallery Placeholder */}
-            <div className="h-64 bg-base-300 relative">
-              {toilet.images?.[0] ? (
-                <img src={toilet.images[0]} className="w-full h-full object-cover" alt={toilet.name} />
-              ) : (
-                <div className="flex items-center justify-center h-full text-5xl opacity-20">🚽</div>
-              )}
-              <div className="absolute top-4 right-4">
-                <div className={`badge badge-lg font-bold shadow-lg ${
-                  toilet.status === 'OPEN' ? 'badge-success' : 'badge-error'
-                }`}>
-                  {toilet.status}
-                </div>
-              </div>
-            </div>
+    <div className="dp-page">
+      {/* ── Back button ── */}
+      <button className="dp-back-btn" onClick={() => navigate(-1)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+          <polyline points="15 18 9 12 15 6"/>
+        </svg>
+        Orqaga
+      </button>
 
-            <div className="p-8">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h1 className="text-4xl font-black tracking-tight">{toilet.name}</h1>
-                  <p className="text-sm opacity-60 mt-1 uppercase font-bold">Joylashuv: {toilet.lat}, {toilet.lng}</p>
-                </div>
-                <div className="stats shadow bg-base-200">
-                  <div className="stat py-2 px-4">
-                    <div className="stat-title text-[10px] uppercase font-bold">Narxi</div>
-                    <div className="stat-value text-xl">{toilet.price} <span className="text-xs opacity-50">uzs</span></div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats Row */}
-              <div className="stats stats-vertical lg:stats-horizontal w-full bg-base-200 shadow-sm rounded-2xl mb-8">
-                <div className="stat">
-                  <div className="stat-title">Reyting</div>
-                  <div className="stat-value text-primary">⭐ {toilet.avg_rating || 0}</div>
-                  <div className="stat-desc">Foydalanuvchilar tomonidan</div>
-                </div>
-                <div className="stat">
-                  <div className="stat-title">Turi</div>
-                  <div className="stat-value text-secondary text-2xl">{toilet.type}</div>
-                  <div className="stat-desc">Kategoriyasi</div>
-                </div>
-                <div className="stat">
-                  <div className="stat-title">Ega</div>
-                  <div className="stat-value text-lg truncate max-w-[150px]">{toilet.owner?.name || 'Owner'}</div>
-                  <div className="stat-desc text-xs">ID: {toilet.ownerId}</div>
-                </div>
-              </div>
-
-              {toilet.images?.length > 1 && (
-                <div className="grid grid-cols-4 gap-2 mb-8">
-                  {toilet.images.slice(1).map((img, i) => (
-                    <img key={i} src={img} className="rounded-xl aspect-square object-cover border border-base-content/10 shadow-sm" alt="Gallery" />
-                  ))}
-                </div>
-              )}
-
-              {user?.id === toilet.ownerId && (
-                <div className="flex gap-2 justify-end border-t border-base-content/5 pt-6 mt-6">
-                  <button className="btn btn-outline btn-sm" onClick={() => navigate(`/toilets/${id}/edit`)}>Tahrirlash</button>
-                  <button className="btn btn-error btn-sm btn-outline" onClick={handleDelete}>O'chirish</button>
-                </div>
-              )}
-            </div>
-          </div>
+      {pageError && (
+        <div className="dp-error">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          {pageError}
+          <button onClick={() => setPageError('')} style={{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',fontSize:'16px'}}>×</button>
         </div>
+      )}
 
-        {/* Reviews Section */}
-        <div className="card bg-base-100 shadow-xl border border-base-content/5 overflow-hidden">
-          <div className="card-body">
-            <h2 className="card-title text-2xl font-black uppercase mb-6">Fikrlar ({reviews.length})</h2>
-            
-            {user?.role === 'USER' && (
-              <div className="bg-base-200 p-6 rounded-2xl mb-8 border border-base-content/5">
-                <h3 className="font-bold mb-4 uppercase text-xs opacity-60 tracking-widest">Fikringizni qoldiring</h3>
-                <form onSubmit={handleReviewSubmit} className="form-control gap-4">
-                  <div className="rating rating-lg mb-2">
-                    {[1, 2, 3, 4, 5].map(n => (
-                      <input 
-                        key={n} 
-                        type="radio" 
-                        name="rating-2" 
-                        className="mask mask-star-2 bg-orange-400" 
-                        checked={Number(reviewForm.rating) === n}
-                        onChange={() => setReviewForm({...reviewForm, rating: String(n)})}
-                      />
-                    ))}
-                  </div>
-                  <textarea 
-                    className="textarea textarea-bordered h-24 focus:textarea-primary text-base" 
-                    placeholder="Sizga yoqdimi? Qanday xizmat ko'rsatildi?" 
-                    value={reviewForm.comment} 
-                    onChange={e => setReviewForm({...reviewForm, comment: e.target.value})}
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    {quickFeedbackOptions.map(opt => (
-                      <button 
-                        key={opt} 
-                        type="button"
-                        className={`btn btn-xs rounded-full ${reviewForm.quick_feedback.includes(opt) ? 'btn-primary' : 'btn-ghost bg-base-300'}`}
-                        onClick={() => toggleQuickFeedback(opt)}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
-                  <button className="btn btn-primary shadow-lg shadow-primary/20" type="submit">Yuborish</button>
-                </form>
+      <div className="dp-layout">
+        {/* ══ LEFT ══ */}
+        <div className="dp-main">
+
+          {/* ── Image gallery ── */}
+          <div className="dp-gallery">
+            <div className="dp-gallery-main">
+              {images.length > 0 ? (
+                <img src={images[activeImg]} alt={toilet.name} className="dp-gallery-img" />
+              ) : (
+                <div className="dp-gallery-placeholder">
+                  <span style={{fontSize:'56px'}}>�</span>
+                  <span style={{fontSize:'13px',color:'rgba(255,255,255,0.7)',marginTop:'8px'}}>Rasm yo'q</span>
+                </div>
+              )}
+              {/* Status badge */}
+              <div className="dp-status-pill" style={{background: statusCfg.bg, color: statusCfg.color, borderColor: statusCfg.color}}>
+                <span className="dp-status-dot" style={{background: statusCfg.color}} />
+                {statusCfg.label}
+              </div>
+              {/* Nav buttons on image */}
+              <div className="dp-nav-btns">
+                <a href={googleNav} target="_blank" rel="noopener noreferrer" className="dp-nav-btn dp-nav-btn--g">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                  Google
+                </a>
+                <a href={yandexNav} target="_blank" rel="noopener noreferrer" className="dp-nav-btn dp-nav-btn--y">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                  Yandex
+                </a>
+              </div>
+            </div>
+            {/* Thumbnails */}
+            {images.length > 1 && (
+              <div className="dp-thumbs">
+                {images.map((img, i) => (
+                  <button key={i} className={`dp-thumb ${i === activeImg ? 'active' : ''}`} onClick={() => setActiveImg(i)}>
+                    <img src={img} alt={`thumb-${i}`} />
+                  </button>
+                ))}
               </div>
             )}
+          </div>
 
-            <div className="space-y-6">
-              {reviews.map(r => (
-                <div key={r.id} className="flex gap-4 p-4 rounded-2xl hover:bg-base-200 transition-colors">
-                  <div className="avatar placeholder">
-                    <div className="bg-neutral text-neutral-content rounded-full w-12 h-12">
-                      <span className="text-lg">{(r.user?.name || 'U').charAt(0)}</span>
-                    </div>
+          {/* ── Info card ── */}
+          <div className="dp-card">
+            <div className="dp-info-header">
+              <div>
+                <h1 className="dp-title">{toilet.name}</h1>
+                <p className="dp-coords">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  {toilet.lat.toFixed(4)}, {toilet.lng.toFixed(4)}
+                </p>
+              </div>
+              <div className="dp-price-badge">
+                {toilet.price > 0 ? `${toilet.price.toLocaleString()} UZS` : '🆓 Bepul'}
+              </div>
+            </div>
+
+            {/* Stats row */}
+            <div className="dp-stats">
+              <div className="dp-stat">
+                <span className="dp-stat-val">{(toilet.avg_rating || 0).toFixed(1)} ⭐</span>
+                <span className="dp-stat-lbl">Reyting</span>
+              </div>
+              <div className="dp-stat-sep" />
+              <div className="dp-stat">
+                <span className="dp-stat-val">{TYPE_LABELS[toilet.type] || toilet.type}</span>
+                <span className="dp-stat-lbl">Turi</span>
+              </div>
+              <div className="dp-stat-sep" />
+              <div className="dp-stat">
+                <span className="dp-stat-val">{reviews.length}</span>
+                <span className="dp-stat-lbl">Fikrlar</span>
+              </div>
+              <div className="dp-stat-sep" />
+              <div className="dp-stat">
+                <span className="dp-stat-val">{toilet.owner?.name || '—'}</span>
+                <span className="dp-stat-lbl">Egasi</span>
+              </div>
+            </div>
+
+            {/* Owner actions */}
+            {user?.id === toilet.ownerId && (
+              <div className="dp-owner-actions">
+                <button className="dp-btn dp-btn--edit" onClick={() => navigate(`/toilets/${id}/edit`)}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  Tahrirlash
+                </button>
+                {!deleteConfirm ? (
+                  <button className="dp-btn dp-btn--del" onClick={() => setDeleteConfirm(true)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+                    </svg>
+                    O'chirish
+                  </button>
+                ) : (
+                  <div className="dp-confirm-row">
+                    <span style={{fontSize:'13px',color:'var(--text-secondary)'}}>Ishonchingiz komilmi?</span>
+                    <button className="dp-btn dp-btn--del" onClick={handleDelete}>Ha, o'chirish</button>
+                    <button className="dp-btn dp-btn--edit" onClick={() => setDeleteConfirm(false)}>Bekor</button>
                   </div>
-                  <div className="flex-1">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-bold text-lg">{r.user?.name || "Noma'lum"}</span>
-                      <span className="badge badge-ghost font-bold">⭐ {r.rating}</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Reviews ── */}
+          <div className="dp-card">
+            <h2 className="dp-section-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+              </svg>
+              Fikrlar
+              <span className="dp-count-pill">{reviews.length}</span>
+            </h2>
+
+            {/* Write review — only USER role */}
+            {user?.role === 'USER' && (
+              <form className="dp-review-form" onSubmit={handleReviewSubmit}>
+                <p className="dp-review-form-label">Fikringizni qoldiring</p>
+                <div className="dp-stars-row">
+                  {[1,2,3,4,5].map(n => (
+                    <button key={n} type="button"
+                      className={`dp-star ${Number(reviewForm.rating) >= n ? 'active' : ''}`}
+                      onClick={() => setReviewForm(f => ({...f, rating: String(n)}))}>
+                      ★
+                    </button>
+                  ))}
+                </div>
+                <textarea className="dp-textarea"
+                  placeholder="Sizga yoqdimi? Qanday xizmat ko'rsatildi?"
+                  value={reviewForm.comment}
+                  onChange={e => setReviewForm(f => ({...f, comment: e.target.value}))}
+                  rows={3} />
+                <div className="dp-quick-tags">
+                  {QUICK_OPTS.map(opt => (
+                    <button key={opt} type="button"
+                      className={`dp-quick-tag ${reviewForm.quick_feedback.includes(opt) ? 'active' : ''}`}
+                      onClick={() => toggleQuickFeedback(opt)}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+                <button className="dp-submit-btn" type="submit" disabled={reviewLoading}>
+                  {reviewLoading ? 'Yuborilmoqda...' : 'Yuborish'}
+                </button>
+              </form>
+            )}
+
+            {/* Review list */}
+            <div className="dp-review-list">
+              {reviews.length === 0 && (
+                <div className="dp-empty">
+                  <span style={{fontSize:'32px'}}>💬</span>
+                  <p>Hali fikrlar yo'q</p>
+                </div>
+              )}
+              {reviews.map(r => (
+                <div key={r.id} className="dp-review-item">
+                  <div className="dp-review-avatar">{(r.user?.name || 'U')[0].toUpperCase()}</div>
+                  <div className="dp-review-body">
+                    <div className="dp-review-meta">
+                      <span className="dp-review-author">{r.user?.name || "Noma'lum"}</span>
+                      <span className="dp-review-stars">
+                        {'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}
+                      </span>
                     </div>
-                    <p className="opacity-80 text-sm leading-relaxed">{r.comment || 'Izohsiz.'}</p>
-                    <div className="flex flex-wrap gap-1 mt-3">
-                      {r.quick_feedback?.map(f => (
-                        <span key={f} className="badge badge-sm badge-outline opacity-50">{f}</span>
-                      ))}
-                    </div>
+                    {r.comment && <p className="dp-review-text">{r.comment}</p>}
+                    {r.quick_feedback?.length > 0 && (
+                      <div className="dp-quick-tags" style={{marginTop:'6px'}}>
+                        {r.quick_feedback.map(f => <span key={f} className="dp-quick-tag active">{f}</span>)}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
-              {reviews.length === 0 && <p className="text-center py-10 opacity-40 font-bold italic">Hali fikrlar yo'q</p>}
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Right Column: Chat Sidebar */}
-      <div className="lg:col-span-1 h-fit sticky top-24">
-        <div className="card bg-base-100 shadow-xl border border-base-content/5 overflow-hidden h-[700px] flex flex-col">
-          <div className="p-4 bg-primary text-primary-content">
-            <h2 className="card-title flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-secondary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-secondary"></span>
-              </span>
-              Ega bilan bog'lanish
-            </h2>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 chat-messages bg-base-200/50">
-            {!user ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-6">
-                <p className="opacity-50 font-bold italic">Chatlashish uchun login qiling</p>
-                <button className="btn btn-primary btn-sm" onClick={() => navigate('/login')}>Kirish</button>
-              </div>
-            ) : (
-              <>
-                {chatMessages.filter(m => m.senderId === toilet.ownerId || m.receiverId === toilet.ownerId).length === 0 && (
-                  <p className="text-center opacity-30 text-xs italic py-10">Muloqotni boshlang...</p>
-                )}
-                {chatMessages.filter(m => m.senderId === toilet.ownerId || m.receiverId === toilet.ownerId).map((m, i) => (
-                  <div key={i} className={`chat ${m.senderId === user.id ? 'chat-end' : 'chat-start'}`}>
-                    <div className={`chat-bubble shadow-sm ${m.senderId === user.id ? 'chat-bubble-primary' : 'chat-bubble-neutral'}`}>
-                      {m.text}
-                    </div>
-                    <div className="chat-footer opacity-50 text-[10px] mt-1">
-                      {new Date(m.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-                ))}
-              </>
-            )}
+        {/* ══ RIGHT: Chat ══ */}
+        <div className="dp-sidebar">
+          {/* Sticky nav card */}
+          <div className="dp-card dp-nav-card">
+            <h3 className="dp-section-title" style={{marginBottom:'12px'}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+              </svg>
+              Yo'nalish
+            </h3>
+            <div style={{display:'flex',gap:'10px',flexWrap:'wrap'}}>
+              <a href={googleNav} target="_blank" rel="noopener noreferrer" className="dp-btn dp-btn--edit" style={{flex:1,justifyContent:'center'}}>
+                Google Maps
+              </a>
+              <a href={yandexNav} target="_blank" rel="noopener noreferrer" className="dp-btn" style={{flex:1,justifyContent:'center',background:'rgba(252,67,0,0.1)',color:'#fc4300',border:'none'}}>
+                Yandex Maps
+              </a>
+            </div>
           </div>
 
-          <div className="p-4 bg-base-100 border-t border-base-content/5">
-            <form onSubmit={handleSendChat} className="join w-full">
-              <input 
-                className="input input-bordered join-item flex-1 focus:input-primary" 
-                placeholder="Xabar..." 
-                value={chatText} 
-                onChange={e => setChatText(e.target.value)} 
-                disabled={!user}
-              />
-              <button className="btn btn-primary join-item" disabled={!user}>Send</button>
+          {/* Chat card */}
+          <div className="dp-card dp-chat-card">
+            <div className="dp-chat-header">
+              <div className="dp-online-dot" />
+              <span className="dp-section-title" style={{fontSize:'14px'}}>Ega bilan bog'lanish</span>
+            </div>
+
+            <div className="dp-chat-messages">
+              {!user ? (
+                <div className="dp-empty" style={{padding:'24px 16px'}}>
+                  <span style={{fontSize:'32px'}}>🔒</span>
+                  <p style={{marginBottom:'12px'}}>Chatlashish uchun kiring</p>
+                  <button className="dp-submit-btn" onClick={() => navigate('/login')}>Kirish</button>
+                </div>
+              ) : (
+                <>
+                  {chatMessages.filter(m => m.senderId === toilet.ownerId || m.receiverId === toilet.ownerId).length === 0 && (
+                    <p className="dp-chat-empty">Muloqotni boshlang...</p>
+                  )}
+                  {chatMessages
+                    .filter(m => m.senderId === toilet.ownerId || m.receiverId === toilet.ownerId)
+                    .map((m, i) => (
+                      <div key={i} className={`dp-bubble-wrap ${m.senderId === user.id ? 'mine' : 'theirs'}`}>
+                        <div className={`dp-bubble ${m.senderId === user.id ? 'mine' : 'theirs'}`}>{m.text}</div>
+                        <div className="dp-bubble-time">
+                          {new Date(m.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    ))}
+                </>
+              )}
+            </div>
+
+            <form className="dp-chat-input-row" onSubmit={handleSendChat}>
+              <input className="dp-chat-input" placeholder="Xabar yozing..."
+                value={chatText} onChange={e => setChatText(e.target.value)} disabled={!user} />
+              <button className="dp-chat-send" type="submit" disabled={!user || !chatText.trim()}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                </svg>
+              </button>
             </form>
           </div>
         </div>
