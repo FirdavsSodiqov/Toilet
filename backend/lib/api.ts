@@ -1,5 +1,6 @@
 import { ZodError } from 'zod';
-import { UnauthorizedError } from '@/lib/auth';
+import { UnauthorizedError, ForbiddenError } from '@/lib/auth';
+import { RateLimitError } from '@/lib/rate-limit';
 
 export interface ApiError {
   error: string;
@@ -26,6 +27,15 @@ export function handleApiError(err: unknown): Response {
   }
   if (err instanceof UnauthorizedError) {
     return jsonError(err.message, 401);
+  }
+  if (err instanceof ForbiddenError) {
+    return jsonError(err.message, 403);
+  }
+  if (err instanceof RateLimitError) {
+    return Response.json(
+      { error: err.message } satisfies ApiError,
+      { status: 429, headers: { 'Retry-After': String(err.retryAfterSeconds) } }
+    );
   }
   console.error('[api] unhandled error:', err);
   const msg = err instanceof Error ? err.message : 'Internal Server Error';

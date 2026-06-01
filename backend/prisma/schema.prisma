@@ -12,18 +12,28 @@ datasource db {
 
 /* ────────────  Auth (NextAuth required) ──────────── */
 
+enum Role {
+  USER
+  ADMIN
+
+  @@map("user_role")
+}
+
 model User {
   id            String    @id @default(uuid()) @db.Uuid
   name          String?
   email         String?   @unique
   emailVerified DateTime? @map("email_verified")
   image         String?
+  role          Role      @default(USER)
   createdAt     DateTime  @default(now())  @map("created_at")
 
   accounts  Account[]
   sessions  Session[]
   reviews   Review[]
   locations Location[] @relation("CreatedLocations")
+  favorites Favorite[]
+  reports   Report[]
 
   @@map("users")
 }
@@ -96,11 +106,14 @@ model Location {
   priceAmount Decimal      @default(0) @db.Decimal(10, 2) @map("price_amount")
   rating      Float        @default(0)
   reviewCount Int          @default(0)            @map("review_count")
+  images      String[]     @default([])
   createdById String?      @map("created_by_id")  @db.Uuid
   createdAt   DateTime     @default(now())        @map("created_at")
 
   createdBy User?     @relation("CreatedLocations", fields: [createdById], references: [id], onDelete: SetNull)
   reviews   Review[]
+  favorites Favorite[]
+  reports   Report[]
 
   @@index([latitude])
   @@index([longitude])
@@ -123,4 +136,53 @@ model Review {
   @@index([locationId])
   @@index([userId])
   @@map("reviews")
+}
+
+model Favorite {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id")     @db.Uuid
+  locationId String   @map("location_id") @db.Uuid
+  createdAt  DateTime @default(now())     @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, locationId])
+  @@index([userId])
+  @@map("favorites")
+}
+
+enum ReportReason {
+  CLOSED
+  WRONG_INFO
+  DUPLICATE
+  INAPPROPRIATE
+  OTHER
+
+  @@map("report_reason")
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+
+  @@map("report_status")
+}
+
+model Report {
+  id         String       @id @default(uuid()) @db.Uuid
+  reporterId String       @map("reporter_id") @db.Uuid
+  locationId String       @map("location_id") @db.Uuid
+  reason     ReportReason
+  note       String?
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())     @map("created_at")
+
+  reporter User     @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([locationId])
+  @@map("reports")
 }

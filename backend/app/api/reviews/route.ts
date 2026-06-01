@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { createReviewSchema } from '@/lib/validation';
 import { requireSession } from '@/lib/auth';
+import { recalcLocationRating } from '@/lib/ratings';
+import { enforceRateLimit } from '@/lib/rate-limit';
 import { handleApiError, jsonError, jsonOk } from '@/lib/api';
 
 export const runtime = 'nodejs';
@@ -10,6 +12,8 @@ export const runtime = 'nodejs';
 export async function POST(request: NextRequest) {
   try {
     const session = await requireSession();
+    enforceRateLimit(`reviews:${session.user.id}`, 10, 60_000);
+
     const body = await request.json();
     const input = createReviewSchema.parse(body);
 
@@ -30,19 +34,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const agg = await tx.review.aggregate({
-        where: { locationId: input.locationId },
-        _avg: { rating: true },
-        _count: { _all: true },
-      });
-
-      await tx.location.update({
-        where: { id: input.locationId },
-        data: {
-          rating: agg._avg.rating ?? 0,
-          reviewCount: agg._count._all,
-        },
-      });
+      await recalcLocationRating(tx, input.locationId);
 
       return review;
     });

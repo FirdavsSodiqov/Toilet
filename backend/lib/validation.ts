@@ -26,6 +26,7 @@ export const addLocationSchema = z
     type: locationTypeSchema.default('public'),
     priceType: priceTypeSchema.default('free'),
     priceAmount: z.number().nonnegative().max(1_000_000).default(0),
+    images: z.array(z.string().url()).max(5).optional().default([]),
   })
   .strict()
   .refine((d) => (d.priceType === 'paid' ? d.priceAmount > 0 : true), {
@@ -34,6 +35,20 @@ export const addLocationSchema = z
   });
 
 export type AddLocationInput = z.infer<typeof addLocationSchema>;
+
+// GET /api/toilets filterlar. .strict() ATAYLAB ishlatilmagan — noma'lum
+// query paramlar (masalan cache-buster) e'tiborsiz qoldiriladi, 422 bermaydi.
+export const toiletsQuerySchema = z.object({
+  search: z.string().trim().min(1).max(200).optional(),
+  type: locationTypeSchema.optional(),
+  priceType: priceTypeSchema.optional(),
+  minRating: z.coerce.number().min(0).max(5).optional(),
+  ownerId: z.string().uuid().optional(),
+  mine: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+export type ToiletsQueryInput = z.infer<typeof toiletsQuerySchema>;
 
 export const createReviewSchema = z
   .object({
@@ -45,6 +60,57 @@ export const createReviewSchema = z
   .strict();
 
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
+
+export const updateReviewSchema = z
+  .object({
+    rating: z.number().int().min(1).max(5).optional(),
+    comment: z.string().min(3).max(2000).optional(),
+    images: z.array(z.string().url()).max(5).optional(),
+  })
+  .strict()
+  .refine(
+    (d) =>
+      d.rating !== undefined ||
+      d.comment !== undefined ||
+      d.images !== undefined,
+    { message: 'At least one of rating, comment, images must be provided' }
+  );
+
+export type UpdateReviewInput = z.infer<typeof updateReviewSchema>;
+
+export const createFavoriteSchema = z
+  .object({ locationId: z.string().uuid() })
+  .strict();
+
+export type CreateFavoriteInput = z.infer<typeof createFavoriteSchema>;
+
+export const createReportSchema = z
+  .object({
+    locationId: z.string().uuid(),
+    reason: z.enum([
+      'CLOSED',
+      'WRONG_INFO',
+      'DUPLICATE',
+      'INAPPROPRIATE',
+      'OTHER',
+    ]),
+    note: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
+export type CreateReportInput = z.infer<typeof createReportSchema>;
+
+export const updateReportSchema = z
+  .object({
+    status: z.enum(['OPEN', 'RESOLVED', 'DISMISSED']),
+  })
+  .strict();
+
+export type UpdateReportInput = z.infer<typeof updateReportSchema>;
+
+export const reportsQuerySchema = z.object({
+  status: z.enum(['OPEN', 'RESOLVED', 'DISMISSED']).optional(),
+});
 
 export const idParamSchema = z.object({ id: z.string().uuid() });
 

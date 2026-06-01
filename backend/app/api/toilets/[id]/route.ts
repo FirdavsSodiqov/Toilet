@@ -7,46 +7,11 @@ import {
   parseSearchParams,
 } from '@/lib/validation';
 import { requireSession } from '@/lib/auth';
+import { serializeLocation } from '@/lib/serializers';
 import { handleApiError, jsonError, jsonOk } from '@/lib/api';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function serializeLocation(location: {
-  id: string;
-  name: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-  type: string;
-  priceType: string;
-  priceAmount: { toString(): string };
-  rating: number;
-  reviewCount: number;
-  createdById: string | null;
-  createdAt: Date;
-  createdBy?: {
-    id: string;
-    name: string | null;
-    image: string | null;
-  } | null;
-}) {
-  return {
-    id: location.id,
-    name: location.name,
-    address: location.address,
-    latitude: location.latitude,
-    longitude: location.longitude,
-    type: location.type,
-    priceType: location.priceType,
-    priceAmount: location.priceAmount.toString(),
-    rating: location.rating,
-    reviewCount: location.reviewCount,
-    createdById: location.createdById,
-    createdAt: location.createdAt,
-    createdBy: location.createdBy ?? null,
-  };
-}
 
 export async function GET(
   request: NextRequest,
@@ -141,6 +106,7 @@ export async function PUT(
         type: input.type,
         priceType: input.priceType,
         priceAmount: input.priceAmount,
+        images: input.images,
       },
       include: {
         createdBy: {

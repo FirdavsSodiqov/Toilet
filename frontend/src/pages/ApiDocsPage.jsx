@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FiLock, FiChevronDown, FiActivity, FiUser, FiMapPin, FiStar, FiArrowLeft } from 'react-icons/fi';
+import { FiLock, FiChevronDown, FiActivity, FiUser, FiMapPin, FiStar, FiArrowLeft, FiHeart, FiFlag, FiShield, FiUploadCloud } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
 const API_DATA = [
@@ -37,7 +37,7 @@ const API_DATA = [
     categoryRu: 'Туалеты (Места)',
     icon: <FiMapPin className="text-blue-500" />,
     endpoints: [
-      { method: 'GET', path: '/api/toilets', descUz: 'Barcha joylarni olish', descRu: 'Получить все места', auth: false },
+      { method: 'GET', path: '/api/toilets', descUz: 'Barcha joylar (filter: search, type, priceType, minRating, limit)', descRu: 'Все места (фильтр: search, type, priceType, minRating, limit)', auth: false },
       { method: 'POST', path: '/api/toilets', descUz: 'Yangi joy qo\'shish', descRu: 'Добавить новое место', auth: true },
       { method: 'GET', path: '/api/toilets/nearby', descUz: 'Yaqin atrofdagi joylarni qidirish', descRu: 'Поиск ближайших мест', auth: false },
       { method: 'GET', path: '/api/toilets/[id]', descUz: 'Joy haqida batafsil va sharhlar', descRu: 'Детальная информация и отзывы', auth: false },
@@ -52,6 +52,50 @@ const API_DATA = [
     icon: <FiStar className="text-yellow-400" />,
     endpoints: [
       { method: 'POST', path: '/api/reviews', descUz: 'Sharh qoldirish va reyting berish', descRu: 'Оставить отзыв и поставить рейтинг', auth: true },
+      { method: 'PATCH', path: '/api/reviews/[id]', descUz: 'O\'z sharhini tahrirlash', descRu: 'Редактировать свой отзыв', auth: true },
+      { method: 'DELETE', path: '/api/reviews/[id]', descUz: 'O\'z sharhini o\'chirish', descRu: 'Удалить свой отзыв', auth: true },
+    ]
+  },
+  {
+    category: 'Favorites',
+    categoryUz: 'Sevimlilar',
+    categoryRu: 'Избранное',
+    icon: <FiHeart className="text-pink-500" />,
+    endpoints: [
+      { method: 'GET', path: '/api/favorites', descUz: 'Mening sevimli joylarim', descRu: 'Мои избранные места', auth: true },
+      { method: 'POST', path: '/api/favorites', descUz: 'Joyni sevimliga qo\'shish', descRu: 'Добавить место в избранное', auth: true },
+      { method: 'DELETE', path: '/api/favorites/[locationId]', descUz: 'Sevimlidan olib tashlash', descRu: 'Удалить из избранного', auth: true },
+    ]
+  },
+  {
+    category: 'Reports',
+    categoryUz: 'Shikoyatlar',
+    categoryRu: 'Жалобы',
+    icon: <FiFlag className="text-orange-500" />,
+    endpoints: [
+      { method: 'POST', path: '/api/reports', descUz: 'Joy haqida shikoyat yuborish (reason, note)', descRu: 'Пожаловаться на место (reason, note)', auth: true },
+    ]
+  },
+  {
+    category: 'Uploads',
+    categoryUz: 'Rasm yuklash',
+    categoryRu: 'Загрузка изображений',
+    icon: <FiUploadCloud className="text-cyan-500" />,
+    endpoints: [
+      { method: 'GET', path: '/api/uploads/sign', descUz: 'Cloudinary uchun imzolangan upload parametrlari', descRu: 'Подписанные параметры загрузки для Cloudinary', auth: true },
+    ]
+  },
+  {
+    category: 'Admin',
+    categoryUz: 'Administrator (faqat ADMIN)',
+    categoryRu: 'Администратор (только ADMIN)',
+    icon: <FiShield className="text-red-500" />,
+    endpoints: [
+      { method: 'GET', path: '/api/admin/stats', descUz: 'Umumiy statistika — dashboard', descRu: 'Общая статистика — дашборд', auth: true },
+      { method: 'GET', path: '/api/admin/users', descUz: 'Barcha foydalanuvchilar ro\'yxati', descRu: 'Список всех пользователей', auth: true },
+      { method: 'GET', path: '/api/admin/locations', descUz: 'Barcha joylar ro\'yxati', descRu: 'Список всех мест', auth: true },
+      { method: 'GET', path: '/api/admin/reports', descUz: 'Shikoyatlar ro\'yxati (status bo\'yicha filter)', descRu: 'Список жалоб (фильтр по статусу)', auth: true },
+      { method: 'PATCH', path: '/api/admin/reports/[id]', descUz: 'Shikoyat statusini o\'zgartirish', descRu: 'Изменить статус жалобы', auth: true },
     ]
   }
 ];
@@ -61,6 +105,7 @@ const MethodBadge = ({ method }) => {
     GET: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     POST: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
     PUT: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    PATCH: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
     DELETE: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
   };
 
